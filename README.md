@@ -92,11 +92,28 @@ Run the phases in order. The trained model in `artifacts/final/` is already incl
 
 ## Run the API and UI
 
+**1. Start the backend** (from the repository root):
+
 ```bash
 python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
 ```
 
-Open `ui/index.html` in a browser (it can be on another machine), enter the backend address, pick a trip and run the prediction. The reference route stays on the server and is only used to compute metrics. See `docs/DEPLOY.md` for the two-laptop setup and firewall notes.
+Check it at `http://127.0.0.1:8000/health`; it should report `"status": "ok"` and `"model_loaded": true`.
+
+**2. Serve the UI** (in a second terminal):
+
+```bash
+cd ui
+python -m http.server 5500
+```
+
+Then open `http://127.0.0.1:5500` in a browser. Do not double-click `index.html`: a `file://` page sends no referrer, and OpenStreetMap then blocks the map tiles ("Access blocked"). The UI can also run on another machine.
+
+**3. Connect and predict.** Enter the backend address (`http://127.0.0.1:8000` on the same machine, or `http://<backend-ip>:8000` from another machine on the same network), click **Connect & load trips**, pick a trip and click **Run prediction**. The reference route stays on the server and is only used to compute metrics.
+
+See `docs/DEPLOY.md` for the two-laptop setup and firewall notes.
+
+**Hosted UI.** The UI can be hosted on GitHub Pages or Netlify, but a hosted (HTTPS) page can only call a backend that is also served over HTTPS. A plain `http://` laptop address will be blocked by the browser.
 
 ## Limitations
 
