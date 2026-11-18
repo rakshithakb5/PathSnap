@@ -1,0 +1,13 @@
+numpy
+scipy
+pandas
+pyarrow
+scikit-learn
+lightgbm
+optuna
+folium
+matplotlib
+joblib
+fastapi
+uvicorn
+requests

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PathSnap Evaluator UI</title>
+<!-- Street map (Leaflet + OpenStreetMap) loads when the laptop has internet; otherwise the page falls back to a plain canvas. -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+ :root{--blue:#1a73e8;--red:#d93025;--green:#188038;--ink:#1f2937;--mut:#6b7280;--line:#e5e7eb;--bg:#f3f5f9}
+ *{box-sizing:border-box}
+ body{font-family:"Segoe UI",system-ui,Arial,sans-serif;margin:0;background:var(--bg);color:var(--ink)}
+ header{background:linear-gradient(120deg,#0b3d91,#1a73e8);color:#fff;padding:16px 26px;display:flex;align-items:center;justify-content:space-between}
+ header h1{margin:0;font-size:21px;letter-spacing:.2px} header small{opacity:.85;font-size:13px}
+ .pill{padding:4px 12px;border-radius:999px;font-size:12px;background:rgba(255,255,255,.18)}
+ .pill.ok{background:#188038}.pill.bad{background:#c5221f}
+ .layout{display:grid;grid-template-columns:310px 1fr;gap:16px;padding:16px;max-width:1500px;margin:auto}
+ @media(max-width:1000px){.layout{grid-template-columns:1fr}}
+ .card{background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(16,24,40,.12);padding:16px}
+ h3{margin:0 0 10px;font-size:14px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut)}
+ label{font-size:12px;color:var(--mut);display:block;margin:10px 0 4px}
+ input,select{width:100%;padding:9px 10px;font-size:14px;border:1px solid #d1d5db;border-radius:8px}
+ select{height:230px;padding:4px}
+ option{padding:6px 8px;border-radius:6px} option:checked{background:var(--blue) linear-gradient(0deg,var(--blue),var(--blue));color:#fff}
+ button{width:100%;padding:11px;font-size:15px;font-weight:600;border:0;border-radius:8px;cursor:pointer;margin-top:12px}
+ #load{background:#eef2f7;color:var(--ink)} #run{background:var(--blue);color:#fff} button:disabled{opacity:.5;cursor:not-allowed}
+ #status{font-size:13px;margin-top:10px;min-height:20px}
+ .good{color:var(--green);font-weight:600}.err{color:var(--red)}
+ .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+ @media(max-width:1000px){.cards{grid-template-columns:repeat(2,1fr)}}
+ .kpi{background:#fff;border-radius:12px;box-shadow:0 1px 4px rgba(16,24,40,.12);padding:14px 16px;border-top:4px solid var(--blue)}
+ .kpi .t{font-size:12px;color:var(--mut)} .kpi .v{font-size:28px;font-weight:700;margin:4px 0} .kpi .d{font-size:12px;color:var(--mut)}
+ .kpi.g{border-top-color:var(--green)} .kpi.o{border-top-color:#f9ab00}
+ .up{color:var(--green);font-weight:600}.down{color:var(--red);font-weight:600}
+ #mapwrap{position:relative;height:540px;border-radius:10px;overflow:hidden;border:1px solid var(--line)}
+ #map,#cv{position:absolute;inset:0;width:100%;height:100%}
+ #cv{display:none;background:#fff}
+ .legend{display:flex;gap:18px;font-size:13px;margin:8px 0 10px;flex-wrap:wrap}
+ .sw{display:inline-block;width:22px;height:4px;border-radius:2px;vertical-align:middle;margin-right:6px}
+ .dot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle;margin-right:6px;background:var(--blue);opacity:.7}
+ table{border-collapse:collapse;width:100%;font-size:14px}
+ td,th{border-bottom:1px solid var(--line);padding:8px 10px;text-align:right} th:first-child,td:first-child{text-align:left} th{color:var(--mut);font-weight:600;font-size:12px;text-transform:uppercase}
+ pre{background:#111827;color:#86efac;padding:10px;border-radius:8px;font-size:12px;max-height:170px;overflow:auto;margin:0;white-space:pre-wrap}
+ .spin{display:none;width:16px;height:16px;border:3px solid #cbd5e1;border-top-color:var(--blue);border-radius:50%;animation:s 0.8s linear infinite;vertical-align:middle;margin-right:6px}
+ @keyframes s{to{transform:rotate(360deg)}}
+</style></head><body>
+<header><div><h1>PathSnap &mdash; GPS Map-Matching Evaluator</h1><small>Noisy GPS &rarr; ML candidate scoring &rarr; HMM/Viterbi route</small></div>
+ <span id="conn" class="pill">not connected</span></header>
+<div class="layout">
+ <div>
+  <div class="card">
+   <h3>1 &middot; Connect</h3>
+   <label>API address (Laptop 1)</label><input id="api" value="http://127.0.0.1:8000">
+   <button id="load">Connect &amp; load trips</button>
+   <h3 style="margin-top:18px">2 &middot; Choose trip</h3>
+   <select id="trip" size="10"></select>
+   <button id="run" disabled>&#9654; Run prediction</button>
+   <div id="status"></div>
+  </div>
+  <div class="card" style="margin-top:16px"><h3>Last API call</h3><pre id="log">-</pre></div>
+ </div>
+ <div>
+  <div class="cards">
+   <div class="kpi"><div class="t">Top-1 accuracy (HMM)</div><div class="v" id="k1">&ndash;</div><div class="d" id="k1d">per GPS point</div></div>
+   <div class="kpi g"><div class="t">Route continuity (HMM)</div><div class="v" id="k2">&ndash;</div><div class="d" id="k2d">connected roads</div></div>
+   <div class="kpi o"><div class="t">Route F1 (HMM)</div><div class="v" id="k3">&ndash;</div><div class="d" id="k3d">predicted vs reference roads</div></div>
+   <div class="kpi"><div class="t">GPS points / server time</div><div class="v" id="k4">&ndash;</div><div class="d" id="k4d">&nbsp;</div></div>
+  </div>
+  <div class="card">
+   <h3>Predicted route</h3>
+   <div class="legend"><span><i class="dot"></i>Raw GPS points</span><span><i class="sw" style="background:var(--red)"></i>Predicted route (classifier + HMM)</span><span id="maptype" style="color:var(--mut)"></span></div>
+   <div id="mapwrap"><div id="map"></div><canvas id="cv" width="1200" height="700"></canvas></div>
+  </div>
+  <div class="card" style="margin-top:16px"><h3>Results (computed on the server)</h3>
+   <table id="res"><tr><td>Run a trip to see results.</td></tr></table></div>
+ </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const pct=x=>(x*100).toFixed(2)+" %", f3=x=>Number(x).toFixed(3);
+const hasLeaflet=()=>typeof L!=="undefined";
+let map=null, layers=null;
+function logmsg(t){$("log").textContent=t}
+function setConn(ok,txt){const c=$("conn");c.className="pill "+(ok?"ok":"bad");c.textContent=txt}
+
+async function loadTrips(){
+  const base=$("api").value.replace(/\/$/,"");
+  $("status").textContent="Connecting...";
+  try{
+    const r=await fetch(base+"/trips"); const j=await r.json();
+    $("trip").innerHTML=j.trips.map(t=>`<option>${t}</option>`).join("");
+    $("trip").selectedIndex=0; $("run").disabled=!j.trips.length;
+    $("status").innerHTML=`<span class="good">Connected &middot; ${j.trips.length} trips available</span>`;
+    setConn(true,"connected"); logmsg(`GET ${base}/trips -> ${j.trips.length} trips`);
+  }catch(e){$("status").innerHTML=`<span class="err">Cannot reach API: ${e}</span>`; setConn(false,"not connected"); logmsg(String(e))}
+}
+async function run(){
+  const base=$("api").value.replace(/\/$/,""), id=$("trip").value; if(!id) return;
+  $("run").disabled=true; $("status").innerHTML=`<i class="spin" style="display:inline-block"></i>Running pipeline on server for trip ${id} ...`;
+  const t0=performance.now();
+  try{
+    const r=await fetch(base+"/predict",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({trip_id:id})});
+    if(!r.ok) throw new Error("HTTP "+r.status+" "+await r.text());
+    const j=await r.json(); const dt=((performance.now()-t0)/1000).toFixed(2);
+    $("status").innerHTML=`<span class="good">Done in ${dt}s (server ${j.timings.total_s}s)</span>`;
+    logmsg(`POST ${base}/predict {"trip_id":"${id}"}\n-> 200 OK, ${j.n_points} GPS points, ${j.predicted_route_arcs.length} route arcs`);
+    draw(j); table(j); kpis(j);
+  }catch(e){$("status").innerHTML=`<span class="err">Error: ${e}</span>`; logmsg(String(e))}
+  $("run").disabled=false;
+}
+
+/* ---------- drawing: street map if Leaflet is available, plain canvas otherwise ---------- */
+function draw(j){
+  if(hasLeaflet()){ try{ return drawLeaflet(j);}catch(e){console.warn("Leaflet failed, using canvas",e)} }
+  drawCanvas(j);
+}
+function drawLeaflet(j){
+  $("cv").style.display="none"; $("map").style.display="block";
+  if(!map){
+    map=L.map("map",{preferCanvas:true});
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19,attribution:"&copy; OpenStreetMap contributors"}).addTo(map);
+  }
+  if(layers){layers.forEach(l=>map.removeLayer(l)); if(map._ctl) map.removeControl(map._ctl)}
+  const gps=L.layerGroup(), route=L.layerGroup(); const step=Math.max(1,Math.floor(j.gps.length/2500));
+  for(let i=0;i<j.gps.length;i+=step){const p=j.gps[i]; L.circleMarker([p[1],p[0]],{radius:2.5,color:"#1a73e8",weight:0,fillOpacity:.65}).addTo(gps)}
+  j.predicted_route_geometry.forEach(s=>L.polyline([[s[0][1],s[0][0]],[s[1][1],s[1][0]]],{color:"#d93025",weight:5,opacity:.9,lineCap:"round"}).addTo(route));
+  gps.addTo(map); route.addTo(map); layers=[gps,route];
+  map._ctl=L.control.layers(null,{"Raw GPS points":gps,"Predicted route":route},{collapsed:false}).addTo(map);
+  const b=L.latLngBounds(j.gps.map(p=>[p[1],p[0]])); map.fitBounds(b.pad(0.05)); setTimeout(()=>map.invalidateSize(),50);
+  $("maptype").textContent="street map (OpenStreetMap)";
+}
+function drawCanvas(j){
+  $("map").style.display="none"; $("cv").style.display="block"; $("maptype").textContent="offline view (no map tiles)";
+  const c=$("cv"), g=c.getContext("2d"); g.clearRect(0,0,c.width,c.height);
+  const pts=j.gps, segs=j.predicted_route_geometry; const all=pts.concat(segs.flat());
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; all.forEach(p=>{x0=Math.min(x0,p[0]);x1=Math.max(x1,p[0]);y0=Math.min(y0,p[1]);y1=Math.max(y1,p[1])});
+  const ky=Math.cos((y0+y1)/2*Math.PI/180), pad=30, W=c.width-2*pad, H=c.height-2*pad;
+  const s=Math.min(W/Math.max((x1-x0)*ky,1e-9),H/Math.max(y1-y0,1e-9));
+  const X=p=>pad+((p[0]-x0)*ky)*s, Y=p=>c.height-pad-((p[1]-y0))*s;
+  g.fillStyle="#1a73e8"; g.globalAlpha=0.55; const step=Math.max(1,Math.floor(pts.length/2500));
+  for(let i=0;i<pts.length;i+=step){g.beginPath();g.arc(X(pts[i]),Y(pts[i]),2.4,0,6.3);g.fill()}
+  g.globalAlpha=1; g.strokeStyle="#d93025"; g.lineWidth=3; g.lineCap="round"; g.beginPath();
+  segs.forEach(sg=>{g.moveTo(X(sg[0]),Y(sg[0]));g.lineTo(X(sg[1]),Y(sg[1]))}); g.stroke();
+}
+
+/* ---------- results ---------- */
+function delta(a,b){const d=(b-a)*100; const cls=d>=0?"up":"down"; return `<span class="${cls}">${d>=0?"+":""}${d.toFixed(2)} pts</span> vs classifier only`}
+function kpis(j){
+  const m=j.metrics; $("k4").textContent=j.n_points.toLocaleString(); $("k4d").textContent=`server time ${j.timings.total_s}s`;
+  if(!m){return}
+  const a=m.classifier_only,b=m.classifier_plus_hmm;
+  $("k1").textContent=pct(b.top1_accuracy); $("k1d").innerHTML=delta(a.top1_accuracy,b.top1_accuracy);
+  $("k2").textContent=pct(b.route_continuity); $("k2d").innerHTML=delta(a.route_continuity,b.route_continuity);
+  $("k3").textContent=f3(b.route_f1); $("k3d").innerHTML=`classifier only: ${f3(a.route_f1)}`;
+}
+function table(j){
+  const m=j.metrics; if(!m){$("res").innerHTML="<tr><td>No reference available for this trip.</td></tr>";return}
+  const a=m.classifier_only, b=m.classifier_plus_hmm;
+  const row=(n,x,y,fmt)=>`<tr><td>${n}</td><td>${fmt(x)}</td><td class="good">${fmt(y)}</td></tr>`;
+  $("res").innerHTML=`<tr><th>Metric</th><th>Classifier only</th><th>Classifier + HMM</th></tr>`+
+   row("Top-1 accuracy (per GPS point)",a.top1_accuracy,b.top1_accuracy,pct)+
+   row("Route continuity",a.route_continuity,b.route_continuity,pct)+
+   row("Route precision",a.route_precision,b.route_precision,f3)+
+   row("Route recall",a.route_recall,b.route_recall,f3)+
+   row("Route F1",a.route_f1,b.route_f1,f3)+
+   `<tr><td>GPS points scored / total</td><td colspan="2">${m.n_scored_points} / ${m.n_points}</td></tr>`+
+   `<tr><td>Server time (features / model / HMM)</td><td colspan="2">${j.timings.features_s}s / ${j.timings.model_s}s / ${j.timings.hmm_s}s</td></tr>`;
+}
+$("load").onclick=loadTrips; $("run").onclick=run;
+</script></body></html>

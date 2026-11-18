@@ -1,0 +1,8 @@
+{
+ "w_emit": 1.0,
+ "alpha": 1.0,
+ "jump_pen": 20.0,
+ "uturn_pen": 20.0,
+ "gap_s": 10.0,
+ "eps": 0.0001
+}
