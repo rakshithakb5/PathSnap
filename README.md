@@ -4,6 +4,7 @@ Snap noisy GPS tracks onto a road network and reconstruct the route that was dri
 
 PathSnap treats map matching as **candidate ranking**. For every GPS point it takes the nearest road segments, scores each with a LightGBM classifier, and then uses an **HMM with Viterbi decoding** to choose the most likely connected path. A FastAPI backend serves predictions and a single-page Leaflet UI shows and scores them.
 
+Built by Team 10 for the PES University ML hackathon (Nov 2026): Machamma Parnika, Muralikrishna Menon, Navya Kishore Dash, Rakshitha K B.
 
 ## Results
 
@@ -44,7 +45,7 @@ outputs/          Plots, tables and maps from our runs
 
 ## Data
 
-The dataset is **not included** in this repository (it is large). To run anything beyond the demo files, you need data in this layout:
+The hackathon dataset is included in `data/` (80 training trips and 10 development trips; the hidden evaluator trips are not part of it). It uses this layout:
 
 ```
 data/
@@ -65,7 +66,7 @@ File formats (no headers):
 | `.arcs` | from_node, to_node (row index = arc id, directed) |
 | `.route` | ordered arc ids driven (training and development data only) |
 
-Either place the folders in `./data`, or point to them with an environment variable:
+By default the code reads `./data`. To use data stored elsewhere, point to it with an environment variable:
 
 ```bash
 export PATHSNAP_DATA=/path/to/data          # Linux / macOS
