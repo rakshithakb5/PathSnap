@@ -1,4 +1,4 @@
-# PathSnap – Team 10 (PES University ML Hackathon)
+# PathSnap– Team 10 (PES University ML Hackathon)
 
 GPS map-matching: noisy GPS track + road network -> road segment per point -> connected route (classifier + HMM/Viterbi).
 Read `docs/GUIDE.md` first: it explains every phase and why each design choice was made.
